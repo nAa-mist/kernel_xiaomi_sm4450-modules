@@ -1,0 +1,47 @@
+name: Import pinned SM4450 modules source
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/import-upstream.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: import-sm4450-modules
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout nAa-mist main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Import pinned upstream commit as a preserved Git parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add upstream https://github.com/xiaomi-ravelin/android_kernel_xiaomi_sm4450-modules.git
+          git fetch -q --depth=1 upstream 23a3d2ac880e7f1f8185fd86abb7a8ff94d24ec3
+          test "$(git rev-parse FETCH_HEAD)" = 23a3d2ac880e7f1f8185fd86abb7a8ff94d24ec3
+          test "$(git ls-tree -r --name-only FETCH_HEAD | wc -l)" -eq 8966
+          git merge --no-ff --allow-unrelated-histories \
+            -m "Import pinned SM4450 modules source (upstream 23a3d2ac880e7f1f8185fd86abb7a8ff94d24ec3)" FETCH_HEAD
+          test "$(git diff --name-only 23a3d2ac880e7f1f8185fd86abb7a8ff94d24ec3 HEAD -- \
+            ':(exclude)README.md' ':(exclude).github/workflows/import-upstream.yml' | wc -l)" -eq 0
+          echo "Source content and Git parent verified, with 8966 pinned upstream paths"
+
+      - name: Push verified merged source to nAa-mist
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:main
+          echo "Published source to nAa-mist/kernel_xiaomi_sm4450-modules"
