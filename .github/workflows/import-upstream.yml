@@ -1,4 +1,4 @@
-name: Import pinned SM4450 modules source
+name: Import pinned SM4450 modules source snapshot
 
 on:
   push:
@@ -18,30 +18,39 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
-      - name: Checkout nAa-mist main
+      - name: Checkout canonical nAa-mist main
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Import pinned upstream commit as a preserved Git parent
+      - name: Fetch verified upstream source commit
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git remote add upstream https://github.com/xiaomi-ravelin/android_kernel_xiaomi_sm4450-modules.git
           git fetch -q --depth=1 upstream 23a3d2ac880e7f1f8185fd86abb7a8ff94d24ec3
           test "$(git rev-parse FETCH_HEAD)" = 23a3d2ac880e7f1f8185fd86abb7a8ff94d24ec3
-          test "$(git ls-tree -r --name-only FETCH_HEAD | wc -l)" -eq 8966
-          git merge --no-ff --allow-unrelated-histories \
-            -m "Import pinned SM4450 modules source (upstream 23a3d2ac880e7f1f8185fd86abb7a8ff94d24ec3)" FETCH_HEAD
-          test "$(git diff --name-only 23a3d2ac880e7f1f8185fd86abb7a8ff94d24ec3 HEAD -- \
-            ':(exclude)README.md' ':(exclude).github/workflows/import-upstream.yml' | wc -l)" -eq 0
-          echo "Source content and Git parent verified, with 8966 pinned upstream paths"
+          test "$(git ls-tree -r --name-only 23a3d2ac880e7f1f8185fd86abb7a8ff94d24ec3 | wc -l)" -eq 8966
 
-      - name: Push verified merged source to nAa-mist
+      - name: Import and verify the full file snapshot without shallow-history parents
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=tar 23a3d2ac880e7f1f8185fd86abb7a8ff94d24ec3 | tar -xf -
+          git add -f -A
+          test "$(git diff --cached --name-only | wc -l)" -eq 8966
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -c commit.verbose=false commit -q -m "Import pinned SM4450 modules snapshot from 23a3d2ac880e7f1f8185fd86abb7a8ff94d24ec3"
+          if test -n "$(git diff --name-only 23a3d2ac880e7f1f8185fd86abb7a8ff94d24ec3 HEAD -- . ':(exclude)README.md' ':(exclude).github/workflows/import-upstream.yml')"; then
+            echo 'Imported snapshot differs from the pinned upstream source' >&2
+            exit 1
+          fi
+          echo "All 8966 upstream files verified against 23a3d2ac880e7f1f8185fd86abb7a8ff94d24ec3"
+
+      - name: Push nAa-mist repository snapshot
         shell: bash
         run: |
           set -euo pipefail
           git push origin HEAD:main
-          echo "Published source to nAa-mist/kernel_xiaomi_sm4450-modules"
+          echo 'Source imported; no stock firmware or proprietary blobs downloaded'
